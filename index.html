@@ -487,8 +487,29 @@
   }
 
   function parseNum(str){
-    const cleaned = String(str).replace(/\./g, '').replace(',', '.').replace(/[^0-9.]/g, '');
-    const v = parseFloat(cleaned);
+    str = String(str).trim();
+    if (!str) return 0;
+    const hasComma = str.includes(',');
+    const hasDot = str.includes('.');
+    let normalized = str;
+    if (hasComma && hasDot){
+      // el que aparece último es el separador decimal real
+      normalized = str.lastIndexOf(',') > str.lastIndexOf('.')
+        ? str.replace(/\./g, '').replace(',', '.')
+        : str.replace(/,/g, '');
+    } else if (hasComma){
+      const parts = str.split(',');
+      normalized = (parts.length === 2 && parts[1].length <= 2)
+        ? str.replace(',', '.')
+        : str.replace(/,/g, '');
+    } else if (hasDot){
+      const parts = str.split('.');
+      normalized = (parts.length > 2)
+        ? str.replace(/\./g, '')
+        : str; // un solo punto = separador decimal (teclado numérico)
+    }
+    normalized = normalized.replace(/[^0-9.]/g, '');
+    const v = parseFloat(normalized);
     return isNaN(v) ? 0 : v;
   }
 
@@ -510,6 +531,8 @@
 
   pesoInput.addEventListener('input', recalc);
   precioInput.addEventListener('input', recalc);
+  pesoInput.addEventListener('focus', () => { pesoInput.value = ''; });
+  precioInput.addEventListener('focus', () => { precioInput.value = ''; });
 
   function saveCache(r, pub){
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ rates: r, published: pub, time: Date.now() })); } catch(e){}
@@ -620,6 +643,13 @@
 
   fetchRates();
   setInterval(fetchRates, 5 * 60 * 1000);
+
+  // Guarda una copia de la app para que abra sin internet
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
 })();
 </script>
 </body>
