@@ -315,47 +315,9 @@
     margin-top: 12px;
   }
 
-  /* --- tasas del día, estilo TasaClik --- */
-  .rate-heading{
-    font-family:'Rokkitt', serif;
-    font-size: 15px;
-    color: var(--cream-dim);
-    margin: 0 2px 10px;
-  }
-  .rate-card{
-    background: linear-gradient(180deg, var(--panel) 0%, #2C2016 100%);
-    border: 1px solid var(--panel-line);
-    border-radius: 14px;
-    padding: 11px 16px;
-    margin-bottom: 8px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-  }
-  .rate-card .left{
-    display:flex;
-    align-items:center;
-    gap:10px;
-  }
-  .rate-card .name{
-    font-size: 13px;
-    font-weight:600;
-    color: var(--cream-dim);
-  }
-  .rate-card .right{
-    text-align:right;
-  }
-  .rate-card .amount{
-    font-family:'JetBrains Mono', monospace;
-    font-weight:700;
-    font-size: 17px;
-    color: var(--cream);
-  }
+  /* --- variación del día, en letras pequeñitas dentro de las tarjetas existentes --- */
   .delta{
-    display:block;
-    font-size: 11px;
     font-weight:600;
-    margin-top: 2px;
     font-family:'JetBrains Mono', monospace;
   }
   .delta.up{ color: var(--mint); }
@@ -396,38 +358,6 @@
           <path d="M21 4v6h-6"/>
         </svg>
       </button>
-    </div>
-  </div>
-
-  <div class="rate-heading">Tasas de hoy</div>
-  <div class="rate-card" data-rate="usd">
-    <div class="left">
-      <span class="badge usd">$</span>
-      <span class="name">Dólar BCV</span>
-    </div>
-    <div class="right">
-      <span class="amount" id="rateUsd">—</span>
-      <span class="delta" id="deltaUsd"></span>
-    </div>
-  </div>
-  <div class="rate-card" data-rate="eur">
-    <div class="left">
-      <span class="badge eur">€</span>
-      <span class="name">Euro BCV</span>
-    </div>
-    <div class="right">
-      <span class="amount" id="rateEur">—</span>
-      <span class="delta" id="deltaEur"></span>
-    </div>
-  </div>
-  <div class="rate-card" data-rate="usdt">
-    <div class="left">
-      <span class="badge usdt">₮</span>
-      <span class="name">USDT (P2P)</span>
-    </div>
-    <div class="right">
-      <span class="amount" id="rateUsdt">—</span>
-      <span class="delta" id="deltaUsdt"></span>
     </div>
   </div>
 
@@ -477,7 +407,10 @@
       <span class="badge usdt">₮</span>
       <span class="name">USDT (P2P)</span>
     </div>
-    <span class="amount" id="outUsdt">0,00</span>
+    <div style="text-align:right;">
+      <span class="amount" id="outUsdt">0,00</span>
+      <span class="sub" id="subUsdt"></span>
+    </div>
   </div>
 
   <div class="rcard final" data-currency="bs">
@@ -530,13 +463,9 @@
   const outBs = document.getElementById('outBs');
   const subEur = document.getElementById('subEur');
   const subUsd = document.getElementById('subUsd');
-  const rateUsd = document.getElementById('rateUsd');
-  const rateEur = document.getElementById('rateEur');
-  const rateUsdt = document.getElementById('rateUsdt');
-  const deltaUsd = document.getElementById('deltaUsd');
-  const deltaEur = document.getElementById('deltaEur');
-  const deltaUsdt = document.getElementById('deltaUsdt');
+  const subUsdt = document.getElementById('subUsdt');
   let previousRatesForDelta = null; // última tasa conocida antes del fetch, para calcular la variación del día
+  let lastDeltas = { usd:null, eur:null, usdt:null }; // se pinta junto a la tasa, en letras pequeñitas
 
   function publishedLabel(isoDate){
     if (!isoDate) return '';
@@ -600,21 +529,22 @@
     return isNaN(v) ? 0 : v;
   }
 
-  function renderDelta(el, v){
-    if (v === null || v === undefined || isNaN(v)){ el.innerHTML = ''; return; }
-    if (Math.abs(v) < 0.005){ el.innerHTML = '<span class="delta flat">＝ 0,00</span>'; return; }
+  function deltaHtml(v){
+    if (v === null || v === undefined || isNaN(v)) return '';
+    if (Math.abs(v) < 0.005) return '<span class="delta flat">＝ 0,00</span>';
     const arrow = v > 0 ? '↑' : '↓';
     const cls = v > 0 ? 'up' : 'down';
-    el.innerHTML = `<span class="delta ${cls}">${arrow} ${fmt(Math.abs(v))}</span>`;
+    return `<span class="delta ${cls}">${arrow} ${fmt(Math.abs(v))}</span>`;
   }
 
-  function renderRateCards(deltas){
-    rateUsd.textContent = rates.usd !== null ? fmt(rates.usd) : '—';
-    rateEur.textContent = rates.eur !== null ? fmt(rates.eur) : '—';
-    rateUsdt.textContent = rates.usdt !== null ? fmt(rates.usdt) : '—';
-    renderDelta(deltaUsd, deltas ? deltas.usd : null);
-    renderDelta(deltaEur, deltas ? deltas.eur : null);
-    renderDelta(deltaUsdt, deltas ? deltas.usdt : null);
+  // Texto chiquito con la tasa de referencia y su variación, dentro de la misma tarjeta de resultado
+  function rateSubHtml(rate, delta, extra){
+    if (rate === null || rate === undefined) return extra || '';
+    const parts = [`${fmt(rate)} Bs`];
+    const d = deltaHtml(delta);
+    if (d) parts.push(d);
+    if (extra) parts.push(extra);
+    return parts.join(' · ');
   }
 
   function recalc(){
@@ -629,8 +559,9 @@
     outBs.textContent = totalBs !== null ? fmt(totalBs) : '—';
     outEur.textContent = totalEur !== null ? fmt(totalEur) : '—';
     outUsdt.textContent = totalUsdt !== null ? fmt(totalUsdt) : '—';
-    subUsd.textContent = publishedLabel(published.usd);
-    subEur.textContent = publishedLabel(published.eur);
+    subUsd.innerHTML = rateSubHtml(rates.usd, lastDeltas.usd, publishedLabel(published.usd));
+    subEur.innerHTML = rateSubHtml(rates.eur, lastDeltas.eur, publishedLabel(published.eur));
+    subUsdt.innerHTML = rateSubHtml(rates.usdt, lastDeltas.usdt);
   }
 
   pesoInput.addEventListener('input', recalc);
@@ -698,6 +629,7 @@
           : null;
       });
       previousRatesForDelta = { ...newRates };
+      lastDeltas = deltas;
 
       rates = newRates;
       published = newPublished;
@@ -706,7 +638,6 @@
       liveDot.classList.remove('stale');
       statusText.textContent = 'Tasas en vivo';
       recalc();
-      renderRateCards(deltas);
     } catch(err){
       liveDot.classList.add('stale');
       statusText.textContent = lastGoodRates ? 'Sin conexión · últimas tasas' : 'Sin conexión';
@@ -723,7 +654,6 @@
     statusText.textContent = 'Mostrando última tasa guardada…';
     liveDot.classList.add('stale');
     recalc();
-    renderRateCards(null);
   }
 
   refreshBtn.addEventListener('click', fetchRates);
