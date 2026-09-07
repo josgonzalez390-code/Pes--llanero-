@@ -315,6 +315,53 @@
     margin-top: 12px;
   }
 
+  /* --- tasas del día, estilo TasaClik --- */
+  .rate-heading{
+    font-family:'Rokkitt', serif;
+    font-size: 15px;
+    color: var(--cream-dim);
+    margin: 0 2px 10px;
+  }
+  .rate-card{
+    background: linear-gradient(180deg, var(--panel) 0%, #2C2016 100%);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 11px 16px;
+    margin-bottom: 8px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .rate-card .left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .rate-card .name{
+    font-size: 13px;
+    font-weight:600;
+    color: var(--cream-dim);
+  }
+  .rate-card .right{
+    text-align:right;
+  }
+  .rate-card .amount{
+    font-family:'JetBrains Mono', monospace;
+    font-weight:700;
+    font-size: 17px;
+    color: var(--cream);
+  }
+  .delta{
+    display:block;
+    font-size: 11px;
+    font-weight:600;
+    margin-top: 2px;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .delta.up{ color: var(--mint); }
+  .delta.down{ color: var(--danger); }
+  .delta.flat{ color: var(--cream-dim); }
+
   @media (prefers-reduced-motion: reduce){
     .dot, #refreshBtn.spinning svg{ animation:none; }
     .ad-track{ animation:none; }
@@ -349,6 +396,38 @@
           <path d="M21 4v6h-6"/>
         </svg>
       </button>
+    </div>
+  </div>
+
+  <div class="rate-heading">Tasas de hoy</div>
+  <div class="rate-card" data-rate="usd">
+    <div class="left">
+      <span class="badge usd">$</span>
+      <span class="name">Dólar BCV</span>
+    </div>
+    <div class="right">
+      <span class="amount" id="rateUsd">—</span>
+      <span class="delta" id="deltaUsd"></span>
+    </div>
+  </div>
+  <div class="rate-card" data-rate="eur">
+    <div class="left">
+      <span class="badge eur">€</span>
+      <span class="name">Euro BCV</span>
+    </div>
+    <div class="right">
+      <span class="amount" id="rateEur">—</span>
+      <span class="delta" id="deltaEur"></span>
+    </div>
+  </div>
+  <div class="rate-card" data-rate="usdt">
+    <div class="left">
+      <span class="badge usdt">₮</span>
+      <span class="name">USDT (P2P)</span>
+    </div>
+    <div class="right">
+      <span class="amount" id="rateUsdt">—</span>
+      <span class="delta" id="deltaUsdt"></span>
     </div>
   </div>
 
@@ -426,8 +505,9 @@
   </div>
 
   <footer>
-    Dólar y Euro: tasa oficial BCV · USDT: mercado P2P (Binance).<br>
+    Dólar y Euro: tasa oficial BCV · USDT: mercado P2P (Binance), con referencia de la app Dólar al Día.<br>
     No estamos afiliados a ninguna entidad gubernamental; las tasas se presentan solo como referencia.
+    <a class="publish-link" style="display:inline-block; margin-top:10px;" href="mailto:josgonzalez390@gmail.com?subject=Contacto%20Peso%20Llanero">¿Nos buscas? Escríbenos</a>
   </footer>
 </div>
 
@@ -450,6 +530,13 @@
   const outBs = document.getElementById('outBs');
   const subEur = document.getElementById('subEur');
   const subUsd = document.getElementById('subUsd');
+  const rateUsd = document.getElementById('rateUsd');
+  const rateEur = document.getElementById('rateEur');
+  const rateUsdt = document.getElementById('rateUsdt');
+  const deltaUsd = document.getElementById('deltaUsd');
+  const deltaEur = document.getElementById('deltaEur');
+  const deltaUsdt = document.getElementById('deltaUsdt');
+  let previousRatesForDelta = null; // última tasa conocida antes del fetch, para calcular la variación del día
 
   function publishedLabel(isoDate){
     if (!isoDate) return '';
@@ -513,6 +600,23 @@
     return isNaN(v) ? 0 : v;
   }
 
+  function renderDelta(el, v){
+    if (v === null || v === undefined || isNaN(v)){ el.innerHTML = ''; return; }
+    if (Math.abs(v) < 0.005){ el.innerHTML = '<span class="delta flat">＝ 0,00</span>'; return; }
+    const arrow = v > 0 ? '↑' : '↓';
+    const cls = v > 0 ? 'up' : 'down';
+    el.innerHTML = `<span class="delta ${cls}">${arrow} ${fmt(Math.abs(v))}</span>`;
+  }
+
+  function renderRateCards(deltas){
+    rateUsd.textContent = rates.usd !== null ? fmt(rates.usd) : '—';
+    rateEur.textContent = rates.eur !== null ? fmt(rates.eur) : '—';
+    rateUsdt.textContent = rates.usdt !== null ? fmt(rates.usdt) : '—';
+    renderDelta(deltaUsd, deltas ? deltas.usd : null);
+    renderDelta(deltaEur, deltas ? deltas.eur : null);
+    renderDelta(deltaUsdt, deltas ? deltas.usdt : null);
+  }
+
   function recalc(){
     const peso = parseNum(pesoInput.value);
     const precio = parseNum(precioInput.value);
@@ -547,6 +651,7 @@
   async function fetchRates(){
     refreshBtn.classList.add('spinning');
     statusText.textContent = 'Actualizando tasas…';
+    const prevForDelta = previousRatesForDelta || { ...rates };
     try {
       const [bcvRes, bcvTodayRes, usdtRes] = await Promise.all([
         fetch('https://ve.dolarapi.com/v1/cotizaciones').then(r => r.json()).catch(() => null),
@@ -586,6 +691,14 @@
         ['usd','eur','usdt'].forEach(k => { if (!newRates[k] && lastGoodRates[k]) newRates[k] = lastGoodRates[k]; });
       }
 
+      const deltas = {};
+      ['usd','eur','usdt'].forEach(k => {
+        deltas[k] = (prevForDelta && prevForDelta[k] != null && newRates[k] != null)
+          ? newRates[k] - prevForDelta[k]
+          : null;
+      });
+      previousRatesForDelta = { ...newRates };
+
       rates = newRates;
       published = newPublished;
       lastGoodRates = { ...newRates };
@@ -593,6 +706,7 @@
       liveDot.classList.remove('stale');
       statusText.textContent = 'Tasas en vivo';
       recalc();
+      renderRateCards(deltas);
     } catch(err){
       liveDot.classList.add('stale');
       statusText.textContent = lastGoodRates ? 'Sin conexión · últimas tasas' : 'Sin conexión';
@@ -609,6 +723,7 @@
     statusText.textContent = 'Mostrando última tasa guardada…';
     liveDot.classList.add('stale');
     recalc();
+    renderRateCards(null);
   }
 
   refreshBtn.addEventListener('click', fetchRates);
